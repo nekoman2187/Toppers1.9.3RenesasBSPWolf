@@ -7,7 +7,8 @@
 #                              Toyohashi Univ. of Technology, JAPAN
 #  Copyright (C) 2006-2014 by Embedded and Real-Time Systems Laboratory
 #              Graduate School of Information Science, Nagoya Univ., JAPAN
-# 
+#  Copyright (C) 2022 wolfSSL Inc.
+#  
 #  上記著作権者は，以下の(1)〜(4)の条件を満たす場合に限り，本ソフトウェ
 #  ア（本ソフトウェアを改変したものを含む．以下同じ）を使用・複製・改
 #  変・再配布（以下，利用と呼ぶ）することを無償で許諾する．
@@ -136,7 +137,7 @@ CFG2_OUT_SRCS := kernel_cfg.h kernel_cfg.c $(CFG2_OUT_SRCS)
 #
 #  共通コンパイルオプションの定義
 #
-COPTS := $(COPTS) -g @(COPTS)
+COPTS := $(COPTS)  -g @(COPTS)
 ifndef OMIT_WARNING_ALL
   COPTS := $(COPTS) -Wall
 endif
@@ -177,7 +178,7 @@ endif
 #
 SYSSVC_DIR := $(SYSSVC_DIR) $(SRCDIR)/syssvc $(SRCDIR)/library
 SYSSVC_ASMOBJS := $(SYSSVC_ASMOBJS)
-SYSSVC_COBJS := $(SYSSVC_COBJS) banner.o syslog.o serial.o logtask.o \
+SYSSVC_COBJS := $(SYSSVC_COBJS) banner.o syslog.o  \
 				@(SYSSVCOBJS) $(CXXRTS)
 SYSSVC_CFLAGS := $(SYSSVC_CFLAGS)
 SYSSVC_LIBS := $(SYSSVC_LIBS)
@@ -324,11 +325,19 @@ banner.o: kernel_cfg.timestamp $(filter-out banner.o,$(ALL_OBJS)) $(LIBS_DEP)
 #
 #  全体のリンク
 #
-$(OBJFILE): $(APPL_CFG) kernel_cfg.timestamp $(ALL_OBJS) $(LIBS_DEP)
-	$(LINK) $(CFLAGS) $(LDFLAGS) -o $(OBJFILE) $(START_OBJS) \
+$(OBJFILE): $(APPL_CFG) kernel_cfg.timestamp $(ALL_OBJS) $(LIBS_DEP) 
+	
+	$(LINK) $(CFLAGS) $(LDFLAGS) -o '${C_PROJECT}'/toppers_rx/$(OBJFILE) $(START_OBJS) \
 			$(APPL_OBJS) $(SYSSVC_OBJS) $(CFG_OBJS) $(ALL_LIBS) $(END_OBJS)
-	$(NM) -n $(OBJFILE) > $(OBJNAME).syms
-	$(OBJCOPY) -O srec -S $(OBJFILE) $(OBJNAME).srec
+	
+		rm -f '${C_PROJECT}'/toppers_rx/libasp.a
+	$(AR) -d  libasp.a bsp_dummy.o 		
+	$(AR) -rcs '${C_PROJECT}'/toppers_rx/libasp.a $(ALL_OBJS) $(KERNEL_LIB_OBJS)
+
+	$(NM) -n '${C_PROJECT}'/toppers_rx/$(OBJFILE) > $(OBJNAME).syms
+	
+	$(OBJCOPY) -O srec -S '${C_PROJECT}'/toppers_rx/$(OBJFILE) $(OBJNAME).srec
+	
 	$(CFG) --pass 3 --kernel asp $(INCLUDES) \
 				--rom-image $(OBJNAME).srec --symbol-table $(OBJNAME).syms \
 				-T $(TARGETDIR)/target_check.tf $(CFG_TABS) $<
@@ -337,22 +346,23 @@ $(OBJFILE): $(APPL_CFG) kernel_cfg.timestamp $(ALL_OBJS) $(LIBS_DEP)
 #  バイナリファイルの生成
 #
 $(OBJNAME).bin: $(OBJFILE)
-	$(OBJCOPY) -O binary -S $(OBJFILE) $(OBJNAME).bin
+	$(OBJCOPY) -O binary -S '${C_PROJECT}'/toppers_rx/$(OBJFILE) $(OBJNAME).bin
 
 #
 #  Sレコードファイルの生成
 #
 $(OBJNAME).srec: $(OBJFILE)
-	$(OBJCOPY) -O srec -S $(OBJFILE) $(OBJNAME).srec
+	$(OBJCOPY) -O srec -S '${C_PROJECT}'/toppers_rx/$(OBJFILE) $(OBJNAME).srec
 
 #
 #  コンパイル結果の消去
 #
 .PHONY: clean
 clean:
-	rm -f \#* *~ *.o $(CLEAN_FILES)
-	rm -f $(OBJFILE) $(OBJNAME).syms $(OBJNAME).srec $(OBJNAME).bin
+	rm -f \#* *~ *.o ../*.o $(CLEAN_FILES)
+	rm -f '${C_PROJECT}'/toppers_rx/$(OBJFILE) $(OBJNAME).syms $(OBJNAME).srec $(OBJNAME).bin
 	rm -f kernel_cfg.timestamp $(CFG2_OUT_SRCS)
+	rm -f ${C_PROJECT}'/toppers_rx/$(OBJFILE)/libasp.a
 	rm -f cfg1_out.c $(CFG1_OUT) cfg1_out.syms cfg1_out.srec
 ifndef KERNEL_LIB
 	rm -f libkernel.a

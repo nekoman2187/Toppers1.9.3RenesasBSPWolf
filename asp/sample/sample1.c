@@ -136,66 +136,33 @@ char	message[3];
  */
 ulong_t	task_loop;		/* タスク内でのループ回数 */
 ulong_t	tex_loop;		/* 例外処理ルーチン内でのループ回数 */
+//Wrapper
+void waisem_ether_wrapper() {
+	wai_sem(ETHER_START_SEM);
+
+}
+void sigsem_ether_wrapper() {
+	sig_sem(ETHER_START_SEM);
+}
 
 /*
  *  並行実行されるタスク
  */
 void task(intptr_t exinf)
 {
+
 	volatile ulong_t	i;
 	int_t		n = 0;
 	int_t		tskno = (int_t) exinf;
 	const char	*graph[] = { "|", "  +", "    *" };
 	char		c;
-
 	SVC_PERROR(ena_tex());
+
 	while (true) {
 		tslp_tsk(500);
 		syslog(LOG_NOTICE, "task%d is running (%03d).   %s",
-										tskno, ++n, graph[tskno-1]);
-		for (i = 0; i < task_loop; i++);
-		c = message[tskno-1];
-		message[tskno-1] = 0;
-		switch (c) {
-		case 'e':
-			syslog(LOG_INFO, "#%d#ext_tsk()", tskno);
-			SVC_PERROR(ext_tsk());
-			assert(0);
-		case 's':
-			syslog(LOG_INFO, "#%d#slp_tsk()", tskno);
-			SVC_PERROR(slp_tsk());
-			break;
-		case 'S':
-			syslog(LOG_INFO, "#%d#tslp_tsk(10000)", tskno);
-			SVC_PERROR(tslp_tsk(10000));
-			break;
-		case 'd':
-			syslog(LOG_INFO, "#%d#dly_tsk(10000)", tskno);
-			SVC_PERROR(dly_tsk(10000));
-			break;
-		case 'y':
-			syslog(LOG_INFO, "#%d#dis_tex()", tskno);
-			SVC_PERROR(dis_tex());
-			break;
-		case 'Y':
-			syslog(LOG_INFO, "#%d#ena_tex()", tskno);
-			SVC_PERROR(ena_tex());
-			break;
-#ifdef CPUEXC1
-		case 'z':
-			syslog(LOG_NOTICE, "#%d#raise CPU exception", tskno);
-			RAISE_CPU_EXCEPTION;
-			break;
-		case 'Z':
-			SVC_PERROR(loc_cpu());
-			syslog(LOG_NOTICE, "#%d#raise CPU exception", tskno);
-			RAISE_CPU_EXCEPTION;
-			SVC_PERROR(unl_cpu());
-			break;
-#endif /* CPUEXC1 */
-		default:
-			break;
-		}
+					tskno, ++n, graph[tskno-1]);
+
 	}
 }
 
@@ -208,7 +175,7 @@ void tex_routine(TEXPTN texptn, intptr_t exinf)
 	int_t	tskno = (int_t) exinf;
 
 	syslog(LOG_NOTICE, "task%d receives exception 0x%04x.", tskno, texptn);
-	for (i = 0; i < tex_loop; i++);
+//	for (i = 0; i < tex_loop; i++);
 
 	if ((texptn & 0x8000U) != 0U) {
 		syslog(LOG_INFO, "#%d#ext_tsk()", tskno);
@@ -307,13 +274,6 @@ void main_task(intptr_t exinf)
 	 *  ポートがオープン済みの場合にはここでE_OBJエラーになるが，支障は
 	 *  ない．
 	 */
-	ercd = serial_opn_por(TASK_PORTID);
-	if (ercd < 0 && MERCD(ercd) != E_OBJ) {
-		syslog(LOG_ERROR, "%s (%d) reported by `serial_opn_por'.",
-									itron_strerror(ercd), SERCD(ercd));
-	}
-	SVC_PERROR(serial_ctl_por(TASK_PORTID,
-							(IOCTL_CRLF | IOCTL_FCSND | IOCTL_FCRCV)));
 
 	/*
  	 *  ループ回数の設定
@@ -372,162 +332,15 @@ void main_task(intptr_t exinf)
 	SVC_PERROR(act_tsk(TASK1));
 	SVC_PERROR(act_tsk(TASK2));
 	SVC_PERROR(act_tsk(TASK3));
+	SVC_PERROR(act_tsk(TASK4));
 
 	/*
  	 *  メインループ
 	 */
 	do {
-		SVC_PERROR(serial_rea_dat(TASK_PORTID, &c, 1));
-		switch (c) {
-		case 'e':
-		case 's':
-		case 'S':
-		case 'd':
-		case 'y':
-		case 'Y':
-		case 'z':
-		case 'Z':
-			message[tskno-1] = c;
-			break;
-		case '1':
-			tskno = 1;
-			tskid = TASK1;
-			break;
-		case '2':
-			tskno = 2;
-			tskid = TASK2;
-			break;
-		case '3':
-			tskno = 3;
-			tskid = TASK3;
-			break;
-		case 'a':
-			syslog(LOG_INFO, "#act_tsk(%d)", tskno);
-			SVC_PERROR(act_tsk(tskid));
-			break;
-		case 'A':
-			syslog(LOG_INFO, "#can_act(%d)", tskno);
-			SVC_PERROR(ercd = can_act(tskid));
-			if (ercd >= 0) {
-				syslog(LOG_NOTICE, "can_act(%d) returns %d", tskno, ercd);
-			}
-			break;
-		case 't':
-			syslog(LOG_INFO, "#ter_tsk(%d)", tskno);
-			SVC_PERROR(ter_tsk(tskid));
-			break;
-		case '>':
-			syslog(LOG_INFO, "#chg_pri(%d, HIGH_PRIORITY)", tskno);
-			SVC_PERROR(chg_pri(tskid, HIGH_PRIORITY));
-			break;
-		case '=':
-			syslog(LOG_INFO, "#chg_pri(%d, MID_PRIORITY)", tskno);
-			SVC_PERROR(chg_pri(tskid, MID_PRIORITY));
-			break;
-		case '<':
-			syslog(LOG_INFO, "#chg_pri(%d, LOW_PRIORITY)", tskno);
-			SVC_PERROR(chg_pri(tskid, LOW_PRIORITY));
-			break;
-		case 'G':
-			syslog(LOG_INFO, "#get_pri(%d, &tskpri)", tskno);
-			SVC_PERROR(ercd = get_pri(tskid, &tskpri));
-			if (ercd >= 0) {
-				syslog(LOG_NOTICE, "priority of task %d is %d", tskno, tskpri);
-			}
-			break;
-		case 'w':
-			syslog(LOG_INFO, "#wup_tsk(%d)", tskno);
-			SVC_PERROR(wup_tsk(tskid));
-			break;
-		case 'W':
-			syslog(LOG_INFO, "#can_wup(%d)", tskno);
-			SVC_PERROR(ercd = can_wup(tskid));
-			if (ercd >= 0) {
-				syslog(LOG_NOTICE, "can_wup(%d) returns %d", tskno, ercd);
-			}
-			break;
-		case 'l':
-			syslog(LOG_INFO, "#rel_wai(%d)", tskno);
-			SVC_PERROR(rel_wai(tskid));
-			break;
-		case 'u':
-			syslog(LOG_INFO, "#sus_tsk(%d)", tskno);
-			SVC_PERROR(sus_tsk(tskid));
-			break;
-		case 'm':
-			syslog(LOG_INFO, "#rsm_tsk(%d)", tskno);
-			SVC_PERROR(rsm_tsk(tskid));
-			break;
-		case 'x':
-			syslog(LOG_INFO, "#ras_tex(%d, 0x0001U)", tskno);
-			SVC_PERROR(ras_tex(tskid, 0x0001U));
-			break;
-		case 'X':
-			syslog(LOG_INFO, "#ras_tex(%d, 0x0002U)", tskno);
-			SVC_PERROR(ras_tex(tskid, 0x0002U));
-			break;
-		case 'r':
-			syslog(LOG_INFO, "#rot_rdq(three priorities)");
-			SVC_PERROR(rot_rdq(HIGH_PRIORITY));
-			SVC_PERROR(rot_rdq(MID_PRIORITY));
-			SVC_PERROR(rot_rdq(LOW_PRIORITY));
-			break;
-		case 'c':
-			syslog(LOG_INFO, "#sta_cyc(1)");
-			SVC_PERROR(sta_cyc(CYCHDR1));
-			break;
-		case 'C':
-			syslog(LOG_INFO, "#stp_cyc(1)");
-			SVC_PERROR(stp_cyc(CYCHDR1));
-			break;
-		case 'b':
-			syslog(LOG_INFO, "#sta_alm(1, 5000)");
-			SVC_PERROR(sta_alm(ALMHDR1, 5000));
-			break;
-		case 'B':
-			syslog(LOG_INFO, "#stp_alm(1)");
-			SVC_PERROR(stp_alm(ALMHDR1));
-			break;
+		slp_tsk();
 
-		case 'V':
-#ifdef TOPPERS_SUPPORT_GET_UTM
-			SVC_PERROR(get_utm(&utime1));
-			SVC_PERROR(get_utm(&utime2));
-			syslog(LOG_NOTICE, "utime1 = %ld, utime2 = %ld",
-										(ulong_t) utime1, (ulong_t) utime2);
-#else /* TOPPERS_SUPPORT_GET_UTM */
-			syslog(LOG_NOTICE, "get_utm is not supported.");
-#endif /* TOPPERS_SUPPORT_GET_UTM */
-			break;
-
-		case 'v':
-			SVC_PERROR(syslog_msk_log(LOG_UPTO(LOG_INFO),
-										LOG_UPTO(LOG_EMERG)));
-			break;
-		case 'q':
-			SVC_PERROR(syslog_msk_log(LOG_UPTO(LOG_NOTICE),
-										LOG_UPTO(LOG_EMERG)));
-			break;
-
-#ifdef BIT_KERNEL
-		case ' ':
-			SVC_PERROR(loc_cpu());
-			{
-				extern ER	bit_kernel(void);
-
-				SVC_PERROR(ercd = bit_kernel());
-				if (ercd >= 0) {
-					syslog(LOG_NOTICE, "bit_kernel passed.");
-				}
-			}
-			SVC_PERROR(unl_cpu());
-			break;
-#endif /* BIT_KERNEL */
-
-		default:
-			break;
-		}
-	} while (c != '\003' && c != 'Q');
+	} while (1);
 
 	syslog(LOG_NOTICE, "Sample program ends.");
 	SVC_PERROR(ext_ker());
